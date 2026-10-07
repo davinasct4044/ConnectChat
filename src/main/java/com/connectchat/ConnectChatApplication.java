@@ -9,5 +9,4 @@ public class ConnectChatApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(ConnectChatApplication.class, args);
 	}
-
 }

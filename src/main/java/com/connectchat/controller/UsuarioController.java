@@ -1,6 +1,7 @@
 package com.connectchat.controller;
 
 import com.connectchat.model.Usuario;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,7 +31,7 @@ public class UsuarioController {
     }
 
     @PostMapping("/usuarios")
-    public void adicionarUsuarioALista(@RequestBody Usuario usuario) {
+    public void adicionarUsuarioALista(@Valid @RequestBody Usuario usuario) {
         addToUsuarios(usuario);
     }
 }

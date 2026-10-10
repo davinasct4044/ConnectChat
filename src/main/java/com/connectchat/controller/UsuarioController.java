@@ -15,10 +15,10 @@ public class UsuarioController {
 
     public UsuarioController() {
         Usuario usuario = new Usuario("Davi", 19);
-        addToUsuarios(usuario);
+        adicionarEmUsuarios(usuario);
     }
 
-    public void addToUsuarios(Usuario usuario) {
+    public void adicionarEmUsuarios(Usuario usuario) {
         usuarios.add(usuario);
     }
     public ArrayList<Usuario> getUsuarios() {
@@ -32,6 +32,6 @@ public class UsuarioController {
 
     @PostMapping("/usuarios")
     public void adicionarUsuarioALista(@Valid @RequestBody Usuario usuario) {
-        addToUsuarios(usuario);
+        adicionarEmUsuarios(usuario);
     }
 }

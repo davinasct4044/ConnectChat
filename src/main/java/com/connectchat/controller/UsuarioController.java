@@ -1,37 +1,30 @@
 package com.connectchat.controller;
 
 import com.connectchat.model.Usuario;
+import com.connectchat.repository.UsuarioRepository;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.ArrayList;
+import java.util.List;
 
 @RestController
 public class UsuarioController {
-    private ArrayList<Usuario> usuarios = new ArrayList<>();
+    private final UsuarioRepository usuarioRepository;
 
-    public UsuarioController() {
-        Usuario usuario = new Usuario("Davi", 19);
-        adicionarEmUsuarios(usuario);
-    }
 
-    public void adicionarEmUsuarios(Usuario usuario) {
-        usuarios.add(usuario);
-    }
-    public ArrayList<Usuario> getUsuarios() {
-        return usuarios;
+    public UsuarioController(UsuarioRepository usuarioRepository) {
+        this.usuarioRepository = usuarioRepository;
     }
 
     @GetMapping("/usuarios")
-    public ArrayList<Usuario> retornarUsuarios () {
-        return getUsuarios();
+    public List<Usuario> retornarUsuariosDoBanco () {
+        return usuarioRepository.findAll();
     }
 
     @PostMapping("/usuarios")
-    public void adicionarUsuarioALista(@Valid @RequestBody Usuario usuario) {
-        adicionarEmUsuarios(usuario);
+    public Usuario adicionarUsuarioNoBanco(@Valid @RequestBody Usuario usuario) {
+        return usuarioRepository.save(usuario);
     }
 }

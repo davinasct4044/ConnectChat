@@ -33,7 +33,12 @@ public class Conversa {
     public Usuario getUsuario1() {
         return usuario1;
     }
+
     public Usuario getUsuario2() {
         return usuario2;
+    }
+
+    public Long getId() {
+        return id;
     }
 }

@@ -1,6 +1,6 @@
-
 package com.connectchat.handler;
 
+import com.connectchat.dto.AbrirConversaRequest;
 import com.connectchat.dto.MensagemWebSocketRequest;
 import com.connectchat.model.Conversa;
 import com.connectchat.model.Mensagem;
@@ -17,6 +17,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -63,7 +64,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                     try {
                         usuarioId = Long.parseLong(partes[1]);
                     } catch (NumberFormatException ignored) {
-                        // O ID informado não é numérico.
+                        // ID inválido.
                     }
                 }
             }
@@ -78,10 +79,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         session.getAttributes().put("usuarioId", usuarioId);
         sessoes.add(session);
 
-        System.out.println(
-                "Usuário " + usuarioId
-                        + " conectado: " + session.getId()
-        );
+        System.out.println("Usuário " + usuarioId + " conectado.");
     }
 
     @Override
@@ -90,10 +88,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             CloseStatus status) {
 
         sessoes.remove(session);
-
-        System.out.println(
-                "Cliente desconectado: " + session.getId()
-        );
+        System.out.println("Cliente desconectado: " + session.getId());
     }
 
     @Override
@@ -101,11 +96,112 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             WebSocketSession session,
             TextMessage message) throws IOException {
 
+        Map<String, Object> entrada;
+
+        try {
+            entrada = objectMapper.readValue(
+                    message.getPayload(),
+                    Map.class
+            );
+        } catch (Exception e) {
+            enviarErro(session, "JSON inválido.");
+            return;
+        }
+
+        Object tipo = entrada.get("tipo");
+
+        if ("abrir_conversa".equals(tipo)) {
+            abrirConversa(session, message.getPayload());
+        } else {
+            receberMensagem(session, message.getPayload());
+        }
+    }
+
+    private void abrirConversa(
+            WebSocketSession session,
+            String payload) throws IOException {
+
+        AbrirConversaRequest request;
+
+        try {
+            request = objectMapper.readValue(
+                    payload,
+                    AbrirConversaRequest.class
+            );
+        } catch (Exception e) {
+            enviarErro(session, "Solicitação de conversa inválida.");
+            return;
+        }
+
+        Long usuarioId =
+                (Long) session.getAttributes().get("usuarioId");
+
+        if (request.conversaId() == null) {
+            enviarErro(session, "Informe o ID da conversa.");
+            return;
+        }
+
+        Conversa conversa = conversaRepository
+                .findById(request.conversaId())
+                .orElse(null);
+
+        if (conversa == null) {
+            enviarErro(session, "Conversa não encontrada.");
+            return;
+        }
+
+        boolean participante =
+                conversa.getUsuario1().getId().equals(usuarioId)
+                        || conversa.getUsuario2().getId().equals(usuarioId);
+
+        if (!participante) {
+            enviarErro(session, "Você não participa desta conversa.");
+            return;
+        }
+
+        // Registra qual conversa esta conexão está visualizando.
+        session.getAttributes().put("conversaId", conversa.getId());
+
+        // Busca as mensagens antigas em ordem cronológica.
+        List<Mensagem> mensagens =
+                mensagemRepository
+                        .findByConversaIdOrderByDataHoraAsc(conversa.getId());
+
+        List<Map<String, Object>> historico = mensagens.stream()
+                .map(m -> Map.<String, Object>of(
+                        "id", m.getId(),
+                        "conteudo", m.getConteudo(),
+                        "remetenteId", m.getRemetente().getId(),
+                        "remetenteNome", m.getRemetente().getNome(),
+                        "dataHora", m.getDataHora().toString()
+                ))
+                .toList();
+
+        String resposta = objectMapper.writeValueAsString(
+                Map.of(
+                        "tipo", "historico",
+                        "conversaId", conversa.getId(),
+                        "mensagens", historico
+                )
+        );
+
+        enviar(session, resposta);
+
+        System.out.println(
+                "Histórico da conversa " + conversa.getId()
+                        + " enviado para usuário " + usuarioId
+        );
+    }
+
+    private void receberMensagem(
+            WebSocketSession session,
+            String payload) throws IOException {
+
         MensagemWebSocketRequest request;
 
         try {
             request = objectMapper.readValue(
-                    message.getPayload(),
+                    payload,
                     MensagemWebSocketRequest.class
             );
         } catch (Exception e) {
@@ -125,7 +221,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        // Busca a conversa e o remetente.
+        Long usuarioConectado =
+                (Long) session.getAttributes().get("usuarioId");
+
+        // Impede que o cliente envie mensagem usando outro ID.
+        if (!request.remetenteId().equals(usuarioConectado)) {
+            enviarErro(
+                    session,
+                    "O remetente não corresponde ao usuário conectado."
+            );
+            return;
+        }
+
         Conversa conversa = conversaRepository
                 .findById(request.conversaId())
                 .orElse(null);
@@ -142,21 +249,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        // Verifica se o remetente participa da conversa.
         boolean participante =
                 conversa.getUsuario1().getId().equals(remetente.getId())
                         || conversa.getUsuario2().getId()
                         .equals(remetente.getId());
 
         if (!participante) {
-            enviarErro(
-                    session,
-                    "Você não participa desta conversa."
-            );
+            enviarErro(session, "Você não participa desta conversa.");
             return;
         }
 
-        // Cria e salva a mensagem no banco.
         Mensagem novaMensagem = new Mensagem(
                 request.conteudo(),
                 remetente,
@@ -166,60 +268,46 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Mensagem mensagemSalva =
                 mensagemRepository.save(novaMensagem);
 
-        // Monta o JSON que será enviado aos participantes.
         String resposta = objectMapper.writeValueAsString(
                 Map.of(
+                        "tipo", "nova_mensagem",
                         "id", mensagemSalva.getId(),
                         "conversaId", conversa.getId(),
                         "conteudo", mensagemSalva.getConteudo(),
                         "remetenteId", remetente.getId(),
                         "remetenteNome", remetente.getNome(),
-                        "dataHora",
-                        mensagemSalva.getDataHora().toString()
+                        "dataHora", mensagemSalva.getDataHora().toString()
                 )
         );
 
-        // Distribui a mensagem para as sessões dos dois participantes.
+        // Envia somente para as conexões que abriram esta conversa.
         for (WebSocketSession sessao : sessoes) {
 
-            if (!sessao.isOpen()) {
-                continue;
-            }
+            Object conversaAtiva =
+                    sessao.getAttributes().get("conversaId");
 
-            Object usuarioSessao =
-                    sessao.getAttributes().get("usuarioId");
+            if (sessao.isOpen()
+                    && conversa.getId().equals(conversaAtiva)) {
 
-            if (!(usuarioSessao instanceof Long id)) {
-                continue;
-            }
-
-            boolean fazParteDaConversa =
-                    id.equals(conversa.getUsuario1().getId())
-                            || id.equals(conversa.getUsuario2().getId());
-
-            if (!fazParteDaConversa) {
-                continue;
-            }
-
-            try {
-                synchronized (sessao) {
-                    if (sessao.isOpen()) {
-                        sessao.sendMessage(
-                                new TextMessage(resposta)
-                        );
-                    }
+                try {
+                    enviar(sessao, resposta);
+                } catch (IOException e) {
+                    System.err.println(
+                            "Falha ao enviar para a sessão "
+                                    + sessao.getId()
+                    );
                 }
+            }
+        }
+    }
 
-                System.out.println(
-                        "Mensagem " + mensagemSalva.getId()
-                                + " enviada para usuário " + id
-                );
+    private void enviar(
+            WebSocketSession session,
+            String resposta) throws IOException {
 
-            } catch (IOException e) {
-                System.err.println(
-                        "Erro ao enviar mensagem para usuário "
-                                + id + ": " + e.getMessage()
-                );
+        synchronized (session) {
+            if (session.isOpen()) {
+                session.sendMessage(new TextMessage(resposta));
             }
         }
     }
@@ -228,12 +316,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             WebSocketSession session,
             String mensagem) throws IOException {
 
-        if (session.isOpen()) {
-            session.sendMessage(new TextMessage(
-                    objectMapper.writeValueAsString(
-                            Map.of("erro", mensagem)
-                    )
-            ));
-        }
+        String resposta = objectMapper.writeValueAsString(
+                Map.of(
+                        "tipo", "erro",
+                        "erro", mensagem
+                )
+        );
+
+        enviar(session, resposta);
     }
 }

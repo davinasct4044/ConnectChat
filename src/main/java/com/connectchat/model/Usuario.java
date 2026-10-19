@@ -55,5 +55,9 @@ public class Usuario {
         return email;
     }
 
+    public String senhaHashInterno() {
+        return senhaHash;
+    }
+
 
 }

@@ -1,8 +1,6 @@
 package com.connectchat.model;
 
-public record CriarConversaRequest(
-        Long usuario1Id,
-        Long usuario2Id
-) {
+import jakarta.validation.constraints.NotNull;
 
+public record CriarConversaRequest(@NotNull Long outroUsuarioId) {
 }

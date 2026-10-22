@@ -1,8 +1,6 @@
 package com.connectchat.model;
 
-public record EnviarMensagemRequest(
-        Long remetenteId,
-        String conteudo
-) {
+import jakarta.validation.constraints.NotBlank;
 
+public record EnviarMensagemRequest(@NotBlank String conteudo) {
 }

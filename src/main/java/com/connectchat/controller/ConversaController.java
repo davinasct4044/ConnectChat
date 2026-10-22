@@ -5,8 +5,15 @@ import com.connectchat.model.CriarConversaRequest;
 import com.connectchat.model.Usuario;
 import com.connectchat.repository.ConversaRepository;
 import com.connectchat.repository.UsuarioRepository;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
@@ -25,17 +32,28 @@ public class ConversaController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Conversa criar(@RequestBody CriarConversaRequest request) {
-        Usuario usuario1 = usuarioRepository.findById(request.usuario1Id())
+    public Conversa criar(
+            @Valid @RequestBody CriarConversaRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        Number claimUsuarioId = jwt.getClaim("usuarioId");
+        if (claimUsuarioId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "Token sem identificação de usuário");
+        }
+        Long usuarioId = claimUsuarioId.longValue();
+
+        if (usuarioId.equals(request.outroUsuarioId())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Não é possível criar conversa consigo mesmo");
+        }
+
+        Usuario usuarioAutenticado = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Usuário 1 não encontrado"));
-
-        Usuario usuario2 = usuarioRepository.findById(request.usuario2Id())
+                        HttpStatus.UNAUTHORIZED, "Usuário autenticado não encontrado"));
+        Usuario outroUsuario = usuarioRepository.findById(request.outroUsuarioId())
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Usuário 2 não encontrado"));
+                        HttpStatus.NOT_FOUND, "Outro usuário não encontrado"));
 
-        Conversa conversa = new Conversa(usuario1, usuario2);
-
-        return conversaRepository.save(conversa);
+        return conversaRepository.save(new Conversa(usuarioAutenticado, outroUsuario));
     }
 }

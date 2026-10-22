@@ -49,34 +49,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session)
             throws IOException {
 
-        String query = session.getUri() != null
-                ? session.getUri().getQuery()
-                : null;
-
-        Long usuarioId = null;
-
-        if (query != null) {
-            for (String parametro : query.split("&")) {
-                String[] partes = parametro.split("=", 2);
-
-                if (partes.length == 2
-                        && partes[0].equals("usuarioId")) {
-                    try {
-                        usuarioId = Long.parseLong(partes[1]);
-                    } catch (NumberFormatException ignored) {
-                        // ID inválido.
-                    }
-                }
-            }
-        }
-
-        if (usuarioId == null
-                || !usuarioRepository.existsById(usuarioId)) {
+        Long usuarioId = (Long) session.getAttributes().get("usuarioId");
+        if (usuarioId == null) {
             session.close(CloseStatus.BAD_DATA);
             return;
         }
 
-        session.getAttributes().put("usuarioId", usuarioId);
         sessoes.add(session);
 
         System.out.println("Usuário " + usuarioId + " conectado.");
@@ -210,13 +188,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
 
         if (request.conversaId() == null
-                || request.remetenteId() == null
                 || request.conteudo() == null
                 || request.conteudo().isBlank()) {
 
             enviarErro(
                     session,
-                    "Informe conversaId, remetenteId e conteudo."
+                    "Informe conversaId e conteudo."
             );
             return;
         }
@@ -224,21 +201,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         Long usuarioConectado =
                 (Long) session.getAttributes().get("usuarioId");
 
-        // Impede que o cliente envie mensagem usando outro ID.
-        if (!request.remetenteId().equals(usuarioConectado)) {
-            enviarErro(
-                    session,
-                    "O remetente não corresponde ao usuário conectado."
-            );
-            return;
-        }
-
         Conversa conversa = conversaRepository
                 .findById(request.conversaId())
                 .orElse(null);
 
         Usuario remetente = usuarioRepository
-                .findById(request.remetenteId())
+                .findById(usuarioConectado)
                 .orElse(null);
 
         if (conversa == null || remetente == null) {

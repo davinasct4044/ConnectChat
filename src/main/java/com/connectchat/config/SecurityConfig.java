@@ -39,7 +39,7 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/usuarios", "/auth/login").permitAll()
-                        // O handshake atual permanece público até a etapa WebSocket.
+                        // O interceptor do handshake exige ticket temporário de uso único.
                         .requestMatchers("/chat").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer.jwt(jwt -> { }))

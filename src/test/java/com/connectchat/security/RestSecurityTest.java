@@ -19,6 +19,7 @@ import com.connectchat.repository.MensagemRepository;
 import com.connectchat.repository.UsuarioRepository;
 import com.connectchat.service.UsuarioService;
 import com.connectchat.service.AutenticacaoService;
+import com.connectchat.service.WebSocketTicketService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -73,6 +74,9 @@ class RestSecurityTest {
     private AutenticacaoService autenticacaoService;
 
     @MockitoBean
+    private WebSocketTicketService webSocketTicketService;
+
+    @MockitoBean
     private MensagemRepository mensagemRepository;
 
     @MockitoBean
@@ -112,6 +116,25 @@ class RestSecurityTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"ana@example.com\",\"senha\":\"senha-segura\"}"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void ticketWebSocketExigeJwtEAutenticadoPodeSolicitaLo() throws Exception {
+        mockMvc.perform(post("/auth/ws-ticket"))
+                .andExpect(status().isUnauthorized());
+
+        when(webSocketTicketService.emitir(1L))
+                .thenReturn(new WebSocketTicketService.IssuedTicket("ticket-curto", 30));
+
+        mockMvc.perform(post("/auth/ws-ticket")
+                        .header("Authorization", bearerToken(1L)))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.ticket").value("ticket-curto"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.expiresInSeconds").value(30));
+
+        verify(webSocketTicketService).emitir(1L);
     }
 
     @Test
